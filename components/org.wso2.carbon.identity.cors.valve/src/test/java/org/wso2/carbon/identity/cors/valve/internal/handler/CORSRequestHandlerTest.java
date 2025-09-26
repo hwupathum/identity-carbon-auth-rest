@@ -42,6 +42,7 @@ import java.util.HashSet;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -116,6 +117,55 @@ public class CORSRequestHandlerTest {
     }
 
     @Test
+    public void testHandleActualRequestWithAllowedOrigin() throws Exception {
+
+        when(corsConfiguration.isSupportsCredentials()).thenReturn(true);
+        when(corsConfiguration.isAllowAnyOrigin()).thenReturn(true);
+
+        try (MockedStatic<CORSValveServiceHolder> mockedStatic = mockStatic(CORSValveServiceHolder.class)) {
+            mockedStatic.when(CORSValveServiceHolder::getInstance).thenReturn(serviceHolder);
+
+            when(serviceHolder.getCorsManager()).thenReturn(corsManager);
+
+            // Default CORS configuration
+            when(corsManager.getCORSConfiguration(anyString())).thenReturn(corsConfiguration);
+            when(request.getHeader(Header.ORIGIN)).thenReturn("https://example.com");
+            when(corsManager.getCORSOrigins(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME))
+                    .thenReturn(new Origin[]{new Origin("https://example.com")});
+
+            corsRequestHandler.handleActualRequest(request, response);
+
+            verify(response).addHeader(Header.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
+            verify(response).addHeader(Header.ACCESS_CONTROL_ALLOW_ORIGIN, "https://example.com");
+            verify(response).addHeader(Header.VARY, "Origin");
+        }
+    }
+
+    @Test
+    public void testHandleActualRequestWithCredentialsSupportAndBlockedOrigin() throws Exception {
+
+        when(corsConfiguration.isSupportsCredentials()).thenReturn(true);
+
+        try (MockedStatic<CORSValveServiceHolder> mockedStatic = mockStatic(CORSValveServiceHolder.class)) {
+            mockedStatic.when(CORSValveServiceHolder::getInstance).thenReturn(serviceHolder);
+
+            when(serviceHolder.getCorsManager()).thenReturn(corsManager);
+
+            // Default CORS configuration
+            when(corsManager.getCORSConfiguration(anyString())).thenReturn(corsConfiguration);
+            when(request.getHeader(Header.ORIGIN)).thenReturn("https://example.com");
+            when(corsManager.getCORSOrigins(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME))
+                    .thenReturn(new Origin[]{});
+
+            corsRequestHandler.handleActualRequest(request, response);
+
+            verify(response).addHeader(Header.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
+            verify(response, never()).addHeader(Header.ACCESS_CONTROL_ALLOW_ORIGIN, "https://example.com");
+            verify(response).addHeader(Header.VARY, "Origin");
+        }
+    }
+
+    @Test
     public void testHandleActualRequestWithAnyOrigin() throws Exception {
 
         try (MockedStatic<CORSValveServiceHolder> mockedStatic = mockStatic(CORSValveServiceHolder.class)) {
@@ -133,6 +183,8 @@ public class CORSRequestHandlerTest {
             corsRequestHandler.handleActualRequest(request, response);
 
             verify(response).addHeader(Header.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+            verify(response, never()).addHeader(Header.VARY, "Origin");
+            verify(response, never()).addHeader(Header.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
         }
     }
 
@@ -178,6 +230,7 @@ public class CORSRequestHandlerTest {
 
             corsRequestHandler.handleActualRequest(request, response);
 
+            verify(response).addHeader(Header.ACCESS_CONTROL_ALLOW_ORIGIN, "https://example.com");
             verify(response).addHeader(Header.VARY, "Origin");
         }
     }
